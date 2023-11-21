@@ -5,7 +5,7 @@
 
 use std::{error::Error, fs};
 
-use board::validate_board;
+use board::{validate_board, GameMove};
 
 mod board;
 pub mod solution;
@@ -49,7 +49,7 @@ pub struct Solver {
     /// Number of moves
     pub moves: i32,
     /// Solution represenation.
-    pub solution: Vec<(usize, i32, Vec<char>)>,
+    pub solution: Vec<GameMove>,
 }
 
 impl Solver {
@@ -59,6 +59,7 @@ impl Solver {
     /// do not represent a valid board. Performs the same checks as [`Solver::init`]
     pub fn init_from_file(file_path: &str) -> Result<Self, Box<dyn Error>> {
         let contents = fs::read_to_string(file_path)?;
+        let contents = contents.replace("\r", "");
         let n = match contents.find('\n') {
             Some(n) => n,
             None => Err("Invalid content")?,
@@ -79,7 +80,7 @@ impl Solver {
         let mut center: i32 = -1;
         let moves = 0;
         let mut board: Vec<char> = Vec::new();
-        let solution: Vec<(usize, i32, Vec<char>)> = Vec::new();
+        let solution: Vec<GameMove> = Vec::new();
         for (pos, field) in init_board.chars().enumerate() {
             if field == '◎' {
                 if center > -1 {
@@ -156,7 +157,14 @@ impl Solver {
                         // see if this new board has a solution
                         if self.solve() {
                             self.unmove(pos as i32, dir);
-                            self.solution.insert(0, (pos, dir, self.board.clone()));
+                            self.solution.insert(
+                                0,
+                                GameMove {
+                                    board: self.board.clone(),
+                                    start_pos: pos,
+                                    direction: dir.into(),
+                                },
+                            );
                             return true;
                         }
                         self.unmove(pos as i32, dir);
@@ -169,7 +177,14 @@ impl Solver {
         // tried each possible move
         if n == 1 && (self.center < 0 || last == self.center) {
             // there's only one peg left
-            self.solution.insert(0, (0, 0, self.board.clone()));
+            self.solution.insert(
+                0,
+                GameMove {
+                    board: self.board.clone(),
+                    start_pos: 0,
+                    direction: 0.into(),
+                },
+            );
             return true;
         }
         // no solution found for this board
@@ -204,14 +219,14 @@ mod tests {
     fn test_english_peg_solo_moves() {
         let mut solver = Solver::init(BOARD, N).unwrap();
         solver.solve();
-        assert_eq!(solver.moves, 391865);
+        assert_eq!(solver.solution.len(), 32);
     }
 
     #[test]
     fn test_english_peg_solo_from_file_moves() {
         let mut solver = Solver::init_from_file("games/english_peg_solo.txt").unwrap();
         solver.solve();
-        assert_eq!(solver.moves, 391865);
+        assert_eq!(solver.solution.len(), 32);
     }
 
     const BOARD_NO_CENTER: &str = "...........
@@ -230,7 +245,7 @@ mod tests {
     fn test_english_peg_no_center() {
         let mut solver = Solver::init(BOARD_NO_CENTER, N).unwrap();
         solver.solve();
-        assert_eq!(solver.moves, 391859);
+        assert_eq!(solver.solution.len(), 32);
     }
 
     const BOARD_TWO_CENTERS: &str = "...........

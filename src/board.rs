@@ -13,6 +13,45 @@ pub struct GameBoard {
     pub column_count: u32,
 }
 
+/// Representation of a move's direction
+#[derive(Debug, PartialEq)]
+pub enum MoveDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+    Still,
+}
+
+impl From<i32> for MoveDirection {
+    fn from(value: i32) -> Self {
+        if value == 1 {
+            return Self::Right;
+        }
+        if value == -1 {
+            return Self::Left;
+        }
+        if value > 1 {
+            return Self::Down;
+        }
+        if value < -1 {
+            return Self::Up;
+        }
+        return Self::Still;
+    }
+}
+
+/// Representation of a move
+#[derive(Debug)]
+pub struct GameMove {
+    /// Board as a vector of characters
+    pub board: Vec<char>,
+    /// Start positino of the move
+    pub start_pos: usize,
+    /// Direction of the move
+    pub direction: MoveDirection,
+}
+
 /// Checks that a board is valid
 ///
 /// - The board must only contain valid characters

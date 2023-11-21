@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fs::File;
 use std::time::Instant;
 
-use crate::board::{clear_border, GameBoard};
+use crate::board::{clear_border, GameBoard, GameMove, MoveDirection};
 
 /// Output tile width in pixels
 const TILE_WIDTH: u32 = 60;
@@ -22,15 +22,12 @@ const FRAME_DELAY: u16 = 50;
 const REPEAT_INFINITE: bool = true;
 
 /// Creates a board image
-fn create_board_image(
-    image_name: &str,
-    game_move: &(usize, i32, Vec<char>),
-) -> Result<(), Box<dyn Error>> {
+fn create_board_image(image_name: &str, game_move: &GameMove) -> Result<(), Box<dyn Error>> {
     let GameBoard {
         board,
         row_count,
         column_count,
-    } = clear_border(&game_move.2);
+    } = clear_border(&game_move.board);
 
     let mut image = ImageReader::open("images/wood.png")?.decode()?;
     image = image.resize(
@@ -102,15 +99,12 @@ fn add_frame(
 }
 
 /// Creates a solution in GIF format
-fn create_solution_gif(
-    image_name: &str,
-    solution: &[(usize, i32, Vec<char>)],
-) -> Result<(), Box<dyn Error>> {
+fn create_solution_gif(image_name: &str, solution: &[GameMove]) -> Result<(), Box<dyn Error>> {
     let GameBoard {
         row_count,
         column_count,
         ..
-    } = clear_border(&solution[0].2);
+    } = clear_border(&solution[0].board);
 
     let frame_width = (column_count * TILE_WIDTH) as u16;
     let frame_height = (row_count * TILE_HEIGHT) as u16;
@@ -155,8 +149,7 @@ fn create_solution_gif(
     }
 
     for (i, game_move) in solution.iter().enumerate() {
-        let (pos, dir, board) = game_move;
-        let board = crate::solution::clear_border(board).board;
+        let board = crate::solution::clear_border(&game_move.board).board;
 
         let mut image = background.clone();
 
@@ -182,10 +175,10 @@ fn create_solution_gif(
             }
         }
         add_frame(&image, frame_width, frame_height, &mut encoder, i)?;
-        let pos = *pos;
-        let dir = *dir;
+        let pos = game_move.start_pos;
+        let dir = &game_move.direction;
 
-        if pos == 0 && dir == 0 {
+        if pos == 0 && *dir == MoveDirection::Still {
             break;
         }
 
@@ -195,16 +188,28 @@ fn create_solution_gif(
         let target_pos_row: u32;
         let target_pos_column: u32;
 
-        if dir == (column_count as i32) + 5 {
-            target_pos_row = start_pos_row + 2;
-            target_pos_column = start_pos_column;
-        } else if dir == -(column_count as i32 + 5) {
-            target_pos_row = start_pos_row - 2;
-            target_pos_column = start_pos_column;
-        } else {
-            target_pos_row = start_pos_row;
-            target_pos_column = (start_pos_column as i32 + 2 * dir) as u32;
-        }
+        match dir {
+            MoveDirection::Up => {
+                target_pos_row = start_pos_row - 2;
+                target_pos_column = start_pos_column;
+            }
+            MoveDirection::Down => {
+                target_pos_row = start_pos_row + 2;
+                target_pos_column = start_pos_column;
+            }
+            MoveDirection::Left => {
+                target_pos_row = start_pos_row;
+                target_pos_column = start_pos_column - 2;
+            }
+            MoveDirection::Right => {
+                target_pos_row = start_pos_row;
+                target_pos_column = start_pos_column + 2;
+            }
+            MoveDirection::Still => {
+                target_pos_row = start_pos_row;
+                target_pos_column = start_pos_column;
+            }
+        };
 
         image::imageops::overlay(
             &mut image,
@@ -227,16 +232,16 @@ fn create_solution_gif(
 }
 
 /// Prints solution as text in the console
-pub fn print_solution(solution: &[(usize, i32, Vec<char>)]) {
+pub fn print_solution(solution: &[GameMove]) {
     for game_move in solution.iter() {
-        let board = clear_border(&game_move.2).board;
+        let board = clear_border(&game_move.board).board;
         println!("{}", String::from_iter(board));
-        println!("{} {}\n", game_move.0, game_move.1);
+        println!("{} {:?}\n", game_move.start_pos, game_move.direction);
     }
 }
 
 /// Creates solution steps as images saved in the `output_folder`.
-pub fn create_images(solution: &[(usize, i32, Vec<char>)], output_folder: &str) {
+pub fn create_images(solution: &[GameMove], output_folder: &str) {
     for (i, game_move) in solution.iter().enumerate() {
         create_board_image(
             &format!("{}/solution_{:03}.png", output_folder, i + 1),
@@ -247,6 +252,6 @@ pub fn create_images(solution: &[(usize, i32, Vec<char>)], output_folder: &str) 
 }
 
 /// Creates a GIF animation of the solution. Saves a GIF file in `output_folder`.
-pub fn create_gif(solution: &[(usize, i32, Vec<char>)], output_folder: &str) {
+pub fn create_gif(solution: &[GameMove], output_folder: &str) {
     create_solution_gif(&format!("{}/solution.gif", output_folder), solution).unwrap();
 }
