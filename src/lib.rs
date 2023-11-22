@@ -115,25 +115,24 @@ impl Solver {
     /// Tests if there is a peg at position pos that can jump over another peg in direction dir.
     ///
     /// If the move is valid, it is executed and move returns true. Otherwise, make_move returns false.
-    fn make_move(&mut self, pos: i32, dir: i32) -> bool {
-        self.moves += 1;
-        if self.board[pos as usize] == '●'
-            && self.board[(pos + dir) as usize] == '●'
-            && self.board[(pos + 2 * dir) as usize] == '○'
+    fn make_move(board: &mut Vec<char>, pos: i32, dir: i32) -> bool {
+        if board[pos as usize] == '●'
+            && board[(pos + dir) as usize] == '●'
+            && board[(pos + 2 * dir) as usize] == '○'
         {
-            self.board[pos as usize] = '○';
-            self.board[(pos + dir) as usize] = '○';
-            self.board[(pos + 2 * dir) as usize] = '●';
+            board[pos as usize] = '○';
+            board[(pos + dir) as usize] = '○';
+            board[(pos + 2 * dir) as usize] = '●';
             return true;
         }
         false
     }
 
     /// Reverts a previously executed valid move.
-    fn unmove(&mut self, pos: i32, dir: i32) {
-        self.board[pos as usize] = '●';
-        self.board[(pos + dir) as usize] = '●';
-        self.board[(pos + 2 * dir) as usize] = '○';
+    fn unmove(board: &mut Vec<char>, pos: i32, dir: i32) {
+        board[pos as usize] = '●';
+        board[(pos + dir) as usize] = '●';
+        board[(pos + 2 * dir) as usize] = '○';
     }
 
     /// Solves a board
@@ -144,7 +143,7 @@ impl Solver {
     pub fn solve(&mut self) -> bool {
         let mut last: i32 = 0;
         let mut n: i32 = 0;
-        //for (pos, field) in self.board.iter().enumerate() {
+
         for pos in 0..self.board.len() {
             let field = self.board[pos];
             // try each board position
@@ -152,11 +151,12 @@ impl Solver {
                 // found a peg
                 for dir in [-1, -(self.row_length as i32), 1, (self.row_length as i32)] {
                     // try each direction
-                    if self.make_move(pos as i32, dir) {
+                    if Self::make_move(&mut self.board, pos as i32, dir) {
                         // a valid move was found and executed,
                         // see if this new board has a solution
+                        self.moves += 1;
                         if self.solve() {
-                            self.unmove(pos as i32, dir);
+                            Self::unmove(&mut self.board, pos as i32, dir);
                             self.solution.insert(
                                 0,
                                 GameMove {
@@ -165,9 +165,19 @@ impl Solver {
                                     direction: dir.into(),
                                 },
                             );
+
+                            let board = self.board.clone();
+                            for ((pos, _), dir) in board.iter().enumerate().filter(|p| *p.1 == '●').zip([
+                                -1,
+                                -(self.row_length as i32),
+                                1,
+                                (self.row_length as i32),
+                            ]) {
+                                println!("{} {}", pos, dir);
+                            }
                             return true;
                         }
-                        self.unmove(pos as i32, dir);
+                        Self::unmove(&mut self.board, pos as i32, dir);
                     }
                 }
                 last = pos as i32;
@@ -185,6 +195,7 @@ impl Solver {
                     direction: 0.into(),
                 },
             );
+
             return true;
         }
         // no solution found for this board
