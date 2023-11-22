@@ -37,7 +37,7 @@ impl From<i32> for MoveDirection {
         if value < -1 {
             return Self::Up;
         }
-        return Self::Still;
+        Self::Still
     }
 }
 

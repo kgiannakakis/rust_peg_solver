@@ -59,7 +59,6 @@ pub fn main() {
 
     let mut solver = Solver::init_from_file(&file_path).unwrap();
     solver.solve();
-    println!("{} moves tried", solver.moves);
     match mode {
         SolutionMode::PrintText => print_solution(&solver.solution),
         SolutionMode::CreateImages => create_images(&solver.solution, &output_folder),

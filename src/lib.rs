@@ -3,10 +3,9 @@
 //! [Golang example](https://go.dev/test/solitaire.go). The code extends the existing sample so that it can work
 //! with other variations of the puzzle, allowing the user to define a custom board.
 
-use std::{error::Error, fs};
-
 use board::{validate_board, GameMove};
 use itertools::iproduct;
+use std::{error::Error, fs};
 
 mod board;
 pub mod solution;
@@ -47,8 +46,8 @@ pub struct Solver {
     board: Vec<char>,
     /// The center of the board. Last peg must be in center position.
     center: i32,
-    /// Number of moves
-    pub moves: i32,
+    /// Number of pegs in the board
+    pub peg_count: u32,
     /// Solution represenation.
     pub solution: Vec<GameMove>,
 }
@@ -60,6 +59,7 @@ impl Solver {
     /// do not represent a valid board. Performs the same checks as [`Solver::init`]
     pub fn init_from_file(file_path: &str) -> Result<Self, Box<dyn Error>> {
         let contents = fs::read_to_string(file_path)?;
+        #[allow(clippy::single_char_pattern)]
         let contents = contents.replace("\r", "");
         let n = match contents.find('\n') {
             Some(n) => n,
@@ -79,9 +79,9 @@ impl Solver {
     ///
     pub fn init(init_board: &str, row_length: usize) -> Result<Self, Box<dyn Error>> {
         let mut center: i32 = -1;
-        let moves = 0;
         let mut board: Vec<char> = Vec::new();
         let solution: Vec<GameMove> = Vec::new();
+        let mut peg_count = 0;
         for (pos, field) in init_board.chars().enumerate() {
             if field == '◎' {
                 if center > -1 {
@@ -95,7 +95,11 @@ impl Solver {
                 }
                 center = pos as i32;
                 board.push('●');
+                peg_count += 1;
             } else {
+                if field == '●' {
+                    peg_count += 1;
+                }
                 board.push(field);
             }
         }
@@ -107,33 +111,45 @@ impl Solver {
         Ok(Self {
             row_length,
             center,
-            moves,
             board,
             solution,
+            peg_count,
         })
     }
 
-    /// Tests if there is a peg at position pos that can jump over another peg in direction dir.
-    ///
-    /// If the move is valid, it is executed and move returns true. Otherwise, make_move returns false.
-    fn make_move(board: &mut Vec<char>, pos: i32, dir: i32) -> bool {
-        if board[pos as usize] == '●'
-            && board[(pos + dir) as usize] == '●'
-            && board[(pos + 2 * dir) as usize] == '○'
-        {
-            board[pos as usize] = '○';
-            board[(pos + dir) as usize] = '○';
-            board[(pos + 2 * dir) as usize] = '●';
-            return true;
-        }
-        false
+    /// Makes a move starting from `pos` in direction `dir` at `board`
+    fn make_move(board: &mut [char], pos: i32, dir: i32) {
+        board[pos as usize] = '○';
+        board[(pos + dir) as usize] = '○';
+        board[(pos + 2 * dir) as usize] = '●';
     }
 
     /// Reverts a previously executed valid move.
-    fn unmove(board: &mut Vec<char>, pos: i32, dir: i32) {
+    fn unmove(board: &mut [char], pos: i32, dir: i32) {
         board[pos as usize] = '●';
         board[(pos + dir) as usize] = '●';
         board[(pos + 2 * dir) as usize] = '○';
+    }
+
+    /// Finds next move in the `board`.
+    ///
+    /// If the move exists it returns the tuple `(pos, dir, index)`. Otherwise it returns `(-1, 0, 0)`.
+    /// The searching starts from `skip_items` index, so that the same moves aren't repeatedly tried.
+    fn find_next_move(board: &[char], dirs: [i32; 4], skip_items: usize) -> (i32, i32, usize) {
+        for (i, ((pos, _), dir)) in
+            iproduct!(board.iter().enumerate().filter(|p| *p.1 == '●'), dirs)
+                .skip(skip_items)
+                .enumerate()
+        {
+            let pos = pos as i32;
+            if board[pos as usize] == '●'
+                && board[(pos + dir) as usize] == '●'
+                && board[(pos + 2 * dir) as usize] == '○'
+            {
+                return (pos, dir, skip_items + i);
+            }
+        }
+        (-1, 0, 0)
     }
 
     /// Solves a board
@@ -142,52 +158,52 @@ impl Solver {
     /// If center is >= 0, that last peg must be in the center position.
     /// If a solution is found, it will return true.
     pub fn solve(&mut self) -> bool {
-        let mut last: i32 = 0;
-        let mut n: i32 = 0;
+        let mut last: i32 = -1;
 
-        let board = self.board.clone();
         let dirs = [-1, -(self.row_length as i32), 1, (self.row_length as i32)];
-        for ((pos, _), dir) in iproduct!(board.iter().enumerate().filter(|p| *p.1 == '●'), dirs) {
-            if Self::make_move(&mut self.board, pos as i32, dir) {
-                // a valid move was found and executed,
-                // see if this new board has a solution
-                if self.solve() {
-                    Self::unmove(&mut self.board, pos as i32, dir);
-                    self.solution.insert(
-                        0,
-                        GameMove {
-                            board: self.board.clone(),
-                            start_pos: pos,
-                            direction: dir.into(),
-                        },
-                    );
-                    self.moves += 1;
-                    return true;
-                }
-                Self::unmove(&mut self.board, pos as i32, dir);
-            }
-            self.moves += 1;
-            if dir == dirs[3] {
-                last = pos as i32;
-                n += 1;
-            }
-        }
-        // tried each possible move
-        if n == 1 && (self.center < 0 || last == self.center) {
-            // there's only one peg left
-            self.solution.insert(
-                0,
-                GameMove {
-                    board: self.board.clone(),
-                    start_pos: 0,
-                    direction: 0.into(),
-                },
-            );
+        let mut board = self.board.clone();
+        let mut moves: Vec<(i32, i32, usize)> = Vec::new();
+        let mut skip_items: usize = 0;
+        let mut max_move_count = 0;
 
-            return true;
+        while moves.len() < ((self.peg_count - 1) as usize)
+            || !(self.center < 0 || last == self.center)
+        {
+            let (pos, dir, last_move_index) = Self::find_next_move(&self.board, dirs, skip_items);
+            if pos > 0 {
+                Self::make_move(&mut self.board, pos, dir);
+                last = pos + 2 * dir;
+                moves.push((pos, dir, last_move_index));
+                skip_items = 0;
+
+                if moves.len() > max_move_count {
+                    max_move_count += 1;
+                    println!("Moves so far {}/{}", max_move_count, self.peg_count - 1);
+                }
+            } else if !moves.is_empty() {
+                let last_move = moves.pop().unwrap();
+                Self::unmove(&mut self.board, last_move.0, last_move.1);
+                skip_items = last_move.2 + 1;
+            } else {
+                return false;
+            }
         }
-        // no solution found for this board
-        false
+
+        for (pos, dir, _) in moves {
+            self.solution.push(GameMove {
+                board: board.clone(),
+                start_pos: pos as usize,
+                direction: dir.into(),
+            });
+            Self::make_move(&mut board, pos, dir);
+        }
+        self.solution.push(GameMove {
+            board: board.clone(),
+            start_pos: 0,
+            direction: 0.into(),
+        });
+
+        true
     }
 }
 
@@ -223,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_english_peg_solo_from_file_moves() {
-        let mut solver = Solver::init_from_file("games/english_peg_solo.txt").unwrap();
+        let mut solver = Solver::init_from_file("games/english.txt").unwrap();
         solver.solve();
         assert_eq!(solver.solution.len(), 32);
     }
