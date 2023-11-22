@@ -6,6 +6,7 @@
 use std::{error::Error, fs};
 
 use board::{validate_board, GameMove};
+use itertools::iproduct;
 
 mod board;
 pub mod solution;
@@ -144,42 +145,29 @@ impl Solver {
         let mut last: i32 = 0;
         let mut n: i32 = 0;
 
-        for pos in 0..self.board.len() {
-            let field = self.board[pos];
-            // try each board position
-            if field == '●' {
-                // found a peg
-                for dir in [-1, -(self.row_length as i32), 1, (self.row_length as i32)] {
-                    // try each direction
-                    if Self::make_move(&mut self.board, pos as i32, dir) {
-                        // a valid move was found and executed,
-                        // see if this new board has a solution
-                        self.moves += 1;
-                        if self.solve() {
-                            Self::unmove(&mut self.board, pos as i32, dir);
-                            self.solution.insert(
-                                0,
-                                GameMove {
-                                    board: self.board.clone(),
-                                    start_pos: pos,
-                                    direction: dir.into(),
-                                },
-                            );
-
-                            let board = self.board.clone();
-                            for ((pos, _), dir) in board.iter().enumerate().filter(|p| *p.1 == '●').zip([
-                                -1,
-                                -(self.row_length as i32),
-                                1,
-                                (self.row_length as i32),
-                            ]) {
-                                println!("{} {}", pos, dir);
-                            }
-                            return true;
-                        }
-                        Self::unmove(&mut self.board, pos as i32, dir);
-                    }
+        let board = self.board.clone();
+        let dirs = [-1, -(self.row_length as i32), 1, (self.row_length as i32)];
+        for ((pos, _), dir) in iproduct!(board.iter().enumerate().filter(|p| *p.1 == '●'), dirs) {
+            if Self::make_move(&mut self.board, pos as i32, dir) {
+                // a valid move was found and executed,
+                // see if this new board has a solution
+                if self.solve() {
+                    Self::unmove(&mut self.board, pos as i32, dir);
+                    self.solution.insert(
+                        0,
+                        GameMove {
+                            board: self.board.clone(),
+                            start_pos: pos,
+                            direction: dir.into(),
+                        },
+                    );
+                    self.moves += 1;
+                    return true;
                 }
+                Self::unmove(&mut self.board, pos as i32, dir);
+            }
+            self.moves += 1;
+            if dir == dirs[3] {
                 last = pos as i32;
                 n += 1;
             }
